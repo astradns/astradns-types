@@ -25,8 +25,22 @@ func New(engineType EngineType, configDir string) (Engine, error) {
 
 // AvailableEngines returns all registered engine types.
 func AvailableEngines() []EngineType {
+	ordered := []EngineType{EngineUnbound, EngineCoreDNS, EnginePowerDNS}
 	types := make([]EngineType, 0, len(registry))
+	seen := make(map[EngineType]struct{}, len(registry))
+
+	for _, t := range ordered {
+		if _, ok := registry[t]; !ok {
+			continue
+		}
+		types = append(types, t)
+		seen[t] = struct{}{}
+	}
+
 	for t := range registry {
+		if _, ok := seen[t]; ok {
+			continue
+		}
 		types = append(types, t)
 	}
 	return types
