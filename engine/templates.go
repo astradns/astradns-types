@@ -1,6 +1,18 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+	"net/netip"
+	"strings"
+)
+
+const (
+	kilobyte = int64(1024)
+	megabyte = kilobyte * 1024
+
+	maxMsgCacheBytes = 256 * megabyte
+)
 
 // UnboundConfigTemplate is the text/template string for generating unbound.conf.
 const UnboundConfigTemplate = `server:
@@ -78,16 +90,22 @@ type TemplateData struct {
 
 // NewTemplateData creates a TemplateData from an EngineConfig with computed fields.
 func NewTemplateData(config EngineConfig) TemplateData {
+	normalized := normalizeTemplateConfig(config)
+
 	// Calculate Unbound cache sizes
-	msgCacheBytes := config.Cache.MaxEntries * 1024
-	if msgCacheBytes > 256*1024*1024 {
-		msgCacheBytes = 256 * 1024 * 1024
+	msgCacheBytes := int64(normalized.Cache.MaxEntries)
+	if msgCacheBytes < 0 {
+		msgCacheBytes = 0
+	}
+	msgCacheBytes *= kilobyte
+	if msgCacheBytes > maxMsgCacheBytes {
+		msgCacheBytes = maxMsgCacheBytes
 	}
 	rrsetCacheBytes := msgCacheBytes * 2
 
 	// Build PowerDNS forward addresses
 	var forwardAddrs string
-	for i, u := range config.Upstreams {
+	for i, u := range normalized.Upstreams {
 		port := u.Port
 		if port == 0 {
 			port = 53
@@ -99,16 +117,107 @@ func NewTemplateData(config EngineConfig) TemplateData {
 	}
 
 	return TemplateData{
-		EngineConfig:     config,
+		EngineConfig:     normalized,
 		MsgCacheSize:     formatBytes(msgCacheBytes),
 		RrsetCacheSize:   formatBytes(rrsetCacheBytes),
 		ForwardAddresses: forwardAddrs,
 	}
 }
 
-func formatBytes(bytes int) string {
-	if bytes >= 1024*1024 {
-		return fmt.Sprintf("%dm", bytes/(1024*1024))
+func normalizeTemplateConfig(config EngineConfig) EngineConfig {
+	normalized := config
+	normalized.ListenAddr = sanitizeTemplateValue(normalized.ListenAddr)
+	normalized.Upstreams = make([]UpstreamConfig, len(config.Upstreams))
+	for i := range config.Upstreams {
+		normalized.Upstreams[i] = config.Upstreams[i]
+		normalized.Upstreams[i].Address = sanitizeTemplateValue(config.Upstreams[i].Address)
 	}
-	return fmt.Sprintf("%dk", bytes/1024)
+
+	return normalized
+}
+
+func sanitizeTemplateValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	return strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, trimmed)
+}
+
+// ValidateTemplateConfig validates addresses before rendering configuration templates.
+func ValidateTemplateConfig(config EngineConfig) error {
+	if err := validateTemplateAddress(config.ListenAddr, "listenAddr"); err != nil {
+		return err
+	}
+
+	for i, upstream := range config.Upstreams {
+		field := fmt.Sprintf("upstreams[%d].address", i)
+		if err := validateTemplateAddress(upstream.Address, field); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateTemplateAddress(value, field string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+
+	for _, r := range trimmed {
+		if r < 32 || r == 127 {
+			return fmt.Errorf("%s contains control characters", field)
+		}
+	}
+
+	if _, err := netip.ParseAddr(trimmed); err == nil {
+		return nil
+	}
+
+	if isValidHostname(trimmed) {
+		return nil
+	}
+
+	return fmt.Errorf("%s must be a valid IP address or DNS hostname", field)
+}
+
+func isValidHostname(host string) bool {
+	name := strings.TrimSuffix(host, ".")
+	if name == "" || len(name) > 253 {
+		return false
+	}
+
+	labels := strings.Split(name, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			b := label[i]
+			isAlpha := b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+			isDigit := b >= '0' && b <= '9'
+			if !isAlpha && !isDigit && b != '-' {
+				return false
+			}
+			if (i == 0 || i == len(label)-1) && b == '-' {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func formatBytes(bytes int64) string {
+	if bytes >= megabyte {
+		value := int64(math.Ceil(float64(bytes) / float64(megabyte)))
+		return fmt.Sprintf("%dm", value)
+	}
+
+	value := int64(math.Ceil(float64(bytes) / float64(kilobyte)))
+	return fmt.Sprintf("%dk", value)
 }
