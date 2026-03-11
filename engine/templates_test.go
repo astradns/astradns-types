@@ -2,7 +2,9 @@ package engine
 
 import (
 	"math"
+	"strings"
 	"testing"
+	"text/template"
 )
 
 func TestValidateTemplateConfigRejectsInjectionCharacters(t *testing.T) {
@@ -75,5 +77,32 @@ func TestNewTemplateDataNormalizesAddressesAndPorts(t *testing.T) {
 	}
 	if got := data.ForwardAddresses; got != "1.1.1.1:53;dns.google:5353" {
 		t.Fatalf("unexpected forward addresses: %q", got)
+	}
+}
+
+func TestRecursorTemplateIncludesMinimumTTLOverride(t *testing.T) {
+	tmpl, err := template.New("recursor.conf").Parse(RecursorConfTemplate)
+	if err != nil {
+		t.Fatalf("failed to parse recursor template: %v", err)
+	}
+
+	data := NewTemplateData(EngineConfig{
+		Upstreams: []UpstreamConfig{{Address: "1.1.1.1", Port: 53}},
+		Cache: CacheConfig{
+			PositiveTtlMin: 60,
+			PositiveTtlMax: 300,
+			NegativeTtl:    30,
+		},
+		ListenAddr: "127.0.0.1",
+		ListenPort: 5354,
+	})
+
+	var rendered strings.Builder
+	if err := tmpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("failed to execute recursor template: %v", err)
+	}
+
+	if !strings.Contains(rendered.String(), "minimum-ttl-override=60") {
+		t.Fatalf("expected minimum-ttl-override in rendered config:\n%s", rendered.String())
 	}
 }

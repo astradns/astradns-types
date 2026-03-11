@@ -71,6 +71,7 @@ log-common-errors=yes
 threads=2
 max-cache-entries={{.Cache.MaxEntries}}
 max-negative-ttl={{.Cache.NegativeTtl}}
+minimum-ttl-override={{.Cache.PositiveTtlMin}}
 max-cache-ttl={{.Cache.PositiveTtlMax}}
 forward-zones=.={{.ForwardAddresses}}
 allow-from=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
