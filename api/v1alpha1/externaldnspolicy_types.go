@@ -22,6 +22,7 @@ type PolicySelector struct {
 // ResourceRef is a reference to another resource by name.
 type ResourceRef struct {
 	// Name is the name of the referenced resource.
+	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 }
 
