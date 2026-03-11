@@ -39,38 +39,38 @@ type Engine interface {
 // EngineConfig is the engine-agnostic configuration derived from CRDs.
 type EngineConfig struct {
 	// Upstreams is the list of upstream resolvers to forward to.
-	Upstreams []UpstreamConfig
+	Upstreams []UpstreamConfig `json:"upstreams"`
 
 	// Cache holds cache tuning parameters.
-	Cache CacheConfig
+	Cache CacheConfig `json:"cache"`
 
 	// ListenAddr is the address the engine should listen on (e.g., "127.0.0.1").
-	ListenAddr string
+	ListenAddr string `json:"listenAddr"`
 
 	// ListenPort is the port the engine should listen on (e.g., 5354).
-	ListenPort int
+	ListenPort int `json:"listenPort"`
 }
 
 // UpstreamConfig represents a single upstream resolver.
 type UpstreamConfig struct {
 	// Address is the IP or hostname of the upstream.
-	Address string
+	Address string `json:"address"`
 	// Port is the port of the upstream.
-	Port int
+	Port int `json:"port"`
 }
 
 // CacheConfig holds cache tuning parameters.
 type CacheConfig struct {
 	// MaxEntries is the maximum number of cache entries.
-	MaxEntries int
+	MaxEntries int `json:"maxEntries"`
 	// PositiveTtlMin is the minimum TTL for positive responses in seconds.
-	PositiveTtlMin int
+	PositiveTtlMin int `json:"positiveTtlMin"`
 	// PositiveTtlMax is the maximum TTL for positive responses in seconds.
-	PositiveTtlMax int
+	PositiveTtlMax int `json:"positiveTtlMax"`
 	// NegativeTtl is the TTL for negative responses in seconds.
-	NegativeTtl int
+	NegativeTtl int `json:"negativeTtl"`
 	// PrefetchEnabled enables cache prefetching.
-	PrefetchEnabled bool
+	PrefetchEnabled bool `json:"prefetchEnabled"`
 	// PrefetchThreshold is the number of lookups before prefetching.
-	PrefetchThreshold int
+	PrefetchThreshold int `json:"prefetchThreshold"`
 }
