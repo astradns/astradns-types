@@ -5,6 +5,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // DNSUpstreamPoolSpec defines the desired state of DNSUpstreamPool.
 type DNSUpstreamPoolSpec struct {
 	// Upstreams is the list of upstream DNS resolvers.
+	// +kubebuilder:validation:MinItems=1
 	Upstreams []Upstream `json:"upstreams"`
 	// HealthCheck configures health checking for upstreams.
 	HealthCheck HealthCheckConfig `json:"healthCheck,omitempty"`
@@ -15,26 +16,39 @@ type DNSUpstreamPoolSpec struct {
 // Upstream defines a single upstream DNS resolver.
 type Upstream struct {
 	// Address is the IP address or hostname of the upstream resolver.
+	// +kubebuilder:validation:MinLength=1
 	Address string `json:"address"`
 	// Port is the port number of the upstream resolver. Defaults to 53.
+	// +kubebuilder:default=53
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port,omitempty"`
 }
 
 // HealthCheckConfig configures upstream health checking.
 type HealthCheckConfig struct {
 	// Enabled enables periodic health checks. Defaults to true.
+	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 	// IntervalSeconds is the time between health checks. Defaults to 30.
+	// +kubebuilder:default=30
+	// +kubebuilder:validation:Minimum=1
 	IntervalSeconds int32 `json:"intervalSeconds,omitempty"`
 	// TimeoutSeconds is the health check timeout. Defaults to 5.
+	// +kubebuilder:default=5
+	// +kubebuilder:validation:Minimum=1
 	TimeoutSeconds int32 `json:"timeoutSeconds,omitempty"`
 	// FailureThreshold is the number of consecutive failures before marking unhealthy. Defaults to 3.
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=1
 	FailureThreshold int32 `json:"failureThreshold,omitempty"`
 }
 
 // LoadBalancingConfig configures upstream load balancing.
 type LoadBalancingConfig struct {
 	// Strategy is the load balancing algorithm: round-robin, first-available, or random.
+	// +kubebuilder:validation:Enum=round-robin;first-available;random
+	// +kubebuilder:default=round-robin
 	Strategy string `json:"strategy,omitempty"`
 }
 

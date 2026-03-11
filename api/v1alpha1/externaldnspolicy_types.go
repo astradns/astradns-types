@@ -15,6 +15,7 @@ type ExternalDNSPolicySpec struct {
 // PolicySelector selects target namespaces for the policy.
 type PolicySelector struct {
 	// Namespaces is the list of namespace names this policy targets.
+	// +kubebuilder:validation:MinItems=1
 	Namespaces []string `json:"namespaces"`
 }
 
