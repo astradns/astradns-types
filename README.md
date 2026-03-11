@@ -46,3 +46,9 @@ make test
 # Run static analysis
 make vet
 ```
+
+## Contribution Policy
+
+- Human and AI contributions: `CONTRIBUTING.md`
+- OpenCode-specific guardrails: `OPENCODE_RULES.md`
+- Repository-level AI constraints: `AGENTS.md`
