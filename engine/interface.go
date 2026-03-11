@@ -48,7 +48,7 @@ type EngineConfig struct {
 	ListenAddr string `json:"listenAddr"`
 
 	// ListenPort is the port the engine should listen on (e.g., 5354).
-	ListenPort int `json:"listenPort"`
+	ListenPort int32 `json:"listenPort"`
 }
 
 // UpstreamConfig represents a single upstream resolver.
@@ -56,21 +56,21 @@ type UpstreamConfig struct {
 	// Address is the IP or hostname of the upstream.
 	Address string `json:"address"`
 	// Port is the port of the upstream.
-	Port int `json:"port"`
+	Port int32 `json:"port"`
 }
 
 // CacheConfig holds cache tuning parameters.
 type CacheConfig struct {
 	// MaxEntries is the maximum number of cache entries.
-	MaxEntries int `json:"maxEntries"`
+	MaxEntries int32 `json:"maxEntries"`
 	// PositiveTtlMin is the minimum TTL for positive responses in seconds.
-	PositiveTtlMin int `json:"positiveTtlMin"`
+	PositiveTtlMin int32 `json:"positiveTtlMin"`
 	// PositiveTtlMax is the maximum TTL for positive responses in seconds.
-	PositiveTtlMax int `json:"positiveTtlMax"`
+	PositiveTtlMax int32 `json:"positiveTtlMax"`
 	// NegativeTtl is the TTL for negative responses in seconds.
-	NegativeTtl int `json:"negativeTtl"`
+	NegativeTtl int32 `json:"negativeTtl"`
 	// PrefetchEnabled enables cache prefetching.
 	PrefetchEnabled bool `json:"prefetchEnabled"`
 	// PrefetchThreshold is the number of lookups before prefetching.
-	PrefetchThreshold int `json:"prefetchThreshold"`
+	PrefetchThreshold int32 `json:"prefetchThreshold"`
 }
