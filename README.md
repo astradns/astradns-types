@@ -16,6 +16,10 @@ This module is not meant to be deployed independently. It is imported as a Go de
 
 All CRD types belong to the API group `dns.astradns.com/v1alpha1`.
 
+## API Lifecycle
+
+The graduation and compatibility strategy is documented in `docs/api-graduation-roadmap.md`.
+
 ## Usage
 
 Import the module in your `go.mod`:
