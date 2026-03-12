@@ -50,12 +50,17 @@ type PrefetchConfig struct {
 
 // DNSCacheProfileStatus defines the observed state of DNSCacheProfile.
 type DNSCacheProfileStatus struct {
+	// ObservedGeneration is the most recent generation acted on by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Conditions represent the latest available observations of the profile's state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=dcp
+// +kubebuilder:printcolumn:name="Active",type=string,JSONPath=`.status.conditions[?(@.type=="Active")].status`
+// +kubebuilder:printcolumn:name="MaxEntries",type=integer,JSONPath=`.spec.maxEntries`
 
 // DNSCacheProfile configures DNS cache behavior.
 type DNSCacheProfile struct {

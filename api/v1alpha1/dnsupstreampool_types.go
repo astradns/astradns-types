@@ -54,6 +54,8 @@ type LoadBalancingConfig struct {
 
 // DNSUpstreamPoolStatus defines the observed state of DNSUpstreamPool.
 type DNSUpstreamPoolStatus struct {
+	// ObservedGeneration is the most recent generation acted on by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Conditions represent the latest available observations of the pool's state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// UpstreamStatuses contains the health status of each upstream.
@@ -72,6 +74,9 @@ type UpstreamStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=dnsup
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Strategy",type=string,JSONPath=`.spec.loadBalancing.strategy`
 
 // DNSUpstreamPool is a pool of upstream DNS resolvers.
 type DNSUpstreamPool struct {

@@ -28,6 +28,8 @@ type ResourceRef struct {
 
 // ExternalDNSPolicyStatus defines the observed state of ExternalDNSPolicy.
 type ExternalDNSPolicyStatus struct {
+	// ObservedGeneration is the most recent generation acted on by the controller.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// Conditions represent the latest available observations of the policy's state.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 	// AppliedNodes is the number of nodes where this policy is applied.
@@ -36,6 +38,9 @@ type ExternalDNSPolicyStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=edp
+// +kubebuilder:printcolumn:name="Validated",type=string,JSONPath=`.status.conditions[?(@.type=="Validated")].status`
+// +kubebuilder:printcolumn:name="AppliedNodes",type=integer,JSONPath=`.status.appliedNodes`
 
 // ExternalDNSPolicy defines per-namespace DNS resolution policy.
 type ExternalDNSPolicy struct {
