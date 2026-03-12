@@ -17,6 +17,7 @@ type DNSUpstreamPoolSpec struct {
 type Upstream struct {
 	// Address is the IP address or hostname of the upstream resolver.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=^(([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*)|(([0-9]{1,3}\.){3}[0-9]{1,3})|([0-9a-fA-F:]+))$
 	Address string `json:"address"`
 	// Port is the port number of the upstream resolver. Defaults to 53.
 	// +kubebuilder:default=53
