@@ -15,6 +15,8 @@ const (
 	EngineCoreDNS EngineType = "coredns"
 	// EnginePowerDNS is the PowerDNS Recursor.
 	EnginePowerDNS EngineType = "powerdns"
+	// EngineBIND is the ISC BIND resolver.
+	EngineBIND EngineType = "bind"
 )
 
 // UpstreamTransport identifies how upstream DNS queries are transported.
