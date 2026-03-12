@@ -47,6 +47,10 @@ make test
 make vet
 ```
 
+## Release
+
+Tagging with `vX.Y.Z` triggers the release workflow (`.github/workflows/release.yml`) to run build/test/vet checks before publishing the module version.
+
 ## Contribution Policy
 
 - Human and AI contributions: `CONTRIBUTING.md`
