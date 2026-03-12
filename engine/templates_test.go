@@ -106,3 +106,74 @@ func TestRecursorTemplateIncludesMinimumTTLOverride(t *testing.T) {
 		t.Fatalf("expected minimum-ttl-override in rendered config:\n%s", rendered.String())
 	}
 }
+
+func TestNewTemplateDataBuildsTransportSpecificCoreDNSUpstreams(t *testing.T) {
+	data := NewTemplateData(EngineConfig{
+		Upstreams: []UpstreamConfig{
+			{Address: "1.1.1.1", Transport: UpstreamTransportDNS},
+			{Address: "dns.quad9.net", Transport: UpstreamTransportDoT},
+			{Address: "dns.google", Transport: UpstreamTransportDoH},
+		},
+	})
+
+	if len(data.CoreDNSUpstreams) != 3 {
+		t.Fatalf("expected 3 coredns upstream targets, got %d", len(data.CoreDNSUpstreams))
+	}
+	if got := data.CoreDNSUpstreams[0]; got != "1.1.1.1:53" {
+		t.Fatalf("unexpected plain DNS upstream target: %q", got)
+	}
+	if got := data.CoreDNSUpstreams[1]; got != "tls://dns.quad9.net:853" {
+		t.Fatalf("unexpected DoT upstream target: %q", got)
+	}
+	if got := data.CoreDNSUpstreams[2]; got != "https://dns.google:443" {
+		t.Fatalf("unexpected DoH upstream target: %q", got)
+	}
+}
+
+func TestNewTemplateDataSetsUnboundForwardTLSUpstream(t *testing.T) {
+	t.Run("all dot upstreams enable unbound tls forwarding", func(t *testing.T) {
+		data := NewTemplateData(EngineConfig{
+			Upstreams: []UpstreamConfig{
+				{Address: "dns.quad9.net", Transport: UpstreamTransportDoT},
+				{Address: "dns.google", Transport: UpstreamTransportDoT},
+			},
+		})
+
+		if !data.UnboundForwardTLSUpstream {
+			t.Fatal("expected unbound forward-tls-upstream to be enabled")
+		}
+	})
+
+	t.Run("mixed transports disable unbound tls forwarding", func(t *testing.T) {
+		data := NewTemplateData(EngineConfig{
+			Upstreams: []UpstreamConfig{
+				{Address: "1.1.1.1", Transport: UpstreamTransportDNS},
+				{Address: "dns.quad9.net", Transport: UpstreamTransportDoT},
+			},
+		})
+
+		if data.UnboundForwardTLSUpstream {
+			t.Fatal("expected unbound forward-tls-upstream to be disabled for mixed transports")
+		}
+	})
+}
+
+func TestValidateTemplateConfigRejectsInvalidTransport(t *testing.T) {
+	err := ValidateTemplateConfig(EngineConfig{
+		ListenAddr: "127.0.0.1",
+		Upstreams:  []UpstreamConfig{{Address: "1.1.1.1", Transport: "bogus"}},
+	})
+	if err == nil {
+		t.Fatal("expected invalid transport error")
+	}
+}
+
+func TestValidateTemplateConfigRejectsTLSServerNameOnPlainDNS(t *testing.T) {
+	err := ValidateTemplateConfig(EngineConfig{
+		ListenAddr: "127.0.0.1",
+		Upstreams:  []UpstreamConfig{{Address: "1.1.1.1", Transport: UpstreamTransportDNS, TLSServerName: "dns.example"}},
+	})
+	if err == nil {
+		t.Fatal("expected tlsServerName validation error on plain DNS transport")
+	}
+}

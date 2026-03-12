@@ -7,6 +7,7 @@ This document defines the upgrade path for `dns.astradns.com` APIs.
 - Active version: `v1alpha1`
 - Scope: MVP APIs for upstream pools, cache profiles, and external policy references
 - Conversion webhook status: not required yet (no `v1beta1` served)
+- Split-horizon status: API model available (`spec.splitHorizon`), enforcement remains phased in operator/agent milestones
 
 ## Graduation plan
 

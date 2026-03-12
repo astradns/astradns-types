@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
+	"runtime"
 	"strings"
 )
 
@@ -12,6 +13,11 @@ const (
 	megabyte = kilobyte * 1024
 
 	maxMsgCacheBytes = 256 * megabyte
+
+	maxWorkerThreads          = int32(256)
+	defaultWorkerThreads      = int32(2)
+	defaultUpstreamWeight     = int32(1)
+	defaultUpstreamPreference = int32(100)
 )
 
 // UnboundConfigTemplate is the text/template string for generating unbound.conf.
@@ -27,8 +33,10 @@ const UnboundConfigTemplate = `server:
     cache-max-ttl: {{.Cache.PositiveTtlMax}}
     cache-max-negative-ttl: {{.Cache.NegativeTtl}}
     prefetch: {{if .Cache.PrefetchEnabled}}yes{{else}}no{{end}}
+    module-config: "{{if eq .DNSSEC.Mode "off"}}iterator{{else}}validator iterator{{end}}"
+    val-permissive-mode: {{if eq .DNSSEC.Mode "validate"}}no{{else}}yes{{end}}
     serve-expired: yes
-    num-threads: 2
+    num-threads: {{.WorkerThreads}}
     access-control: 127.0.0.0/8 allow
     access-control: 10.0.0.0/8 allow
     access-control: 172.16.0.0/12 allow
@@ -36,6 +44,7 @@ const UnboundConfigTemplate = `server:
 
 forward-zone:
     name: "."
+    forward-tls-upstream: {{if .UnboundForwardTLSUpstream}}yes{{else}}no{{end}}
 {{- range .Upstreams}}
     forward-addr: {{.Address}}{{if ne .Port 53}}@{{.Port}}{{end}}
 {{- end}}
@@ -44,7 +53,10 @@ forward-zone:
 // CorefileTemplate is the text/template string for generating a CoreDNS Corefile.
 const CorefileTemplate = `.:{{.ListenPort}} {
     bind {{.ListenAddr}}
-    forward . {{range .Upstreams}}{{.Address}}:{{.Port}} {{end}}{
+    forward . {{range .CoreDNSUpstreams}}{{.}} {{end}}{
+{{- if .CoreDNSTLSServerName}}
+        tls_servername {{.CoreDNSTLSServerName}}
+{{- end}}
         policy sequential
     }
     cache {{.Cache.PositiveTtlMax}} {
@@ -68,11 +80,12 @@ daemon=no
 write-pid=no
 disable-syslog=yes
 log-common-errors=yes
-threads=2
+threads={{.WorkerThreads}}
 max-cache-entries={{.Cache.MaxEntries}}
 max-negative-ttl={{.Cache.NegativeTtl}}
 minimum-ttl-override={{.Cache.PositiveTtlMin}}
 max-cache-ttl={{.Cache.PositiveTtlMax}}
+dnssec={{.DNSSEC.Mode}}
 forward-zones=.={{.ForwardAddresses}}
 allow-from=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 `
@@ -87,6 +100,12 @@ type TemplateData struct {
 	RrsetCacheSize string
 	// ForwardAddresses is the PowerDNS semicolon-separated upstream list (e.g., "1.1.1.1:53;8.8.8.8:53").
 	ForwardAddresses string
+	// CoreDNSUpstreams is the ordered upstream target list for CoreDNS forward.
+	CoreDNSUpstreams []string
+	// CoreDNSTLSServerName is an optional tls_servername for CoreDNS forward.
+	CoreDNSTLSServerName string
+	// UnboundForwardTLSUpstream toggles forward-tls-upstream in Unbound.
+	UnboundForwardTLSUpstream bool
 }
 
 // NewTemplateData creates a TemplateData from an EngineConfig with computed fields.
@@ -106,32 +125,85 @@ func NewTemplateData(config EngineConfig) TemplateData {
 
 	// Build PowerDNS forward addresses
 	var forwardAddrs string
+	coreDNSUpstreams := make([]string, 0, len(normalized.Upstreams))
+	coreDNSTLSServerNames := make(map[string]struct{})
+	unboundForwardTLSUpstream := len(normalized.Upstreams) > 0
+
 	for i, u := range normalized.Upstreams {
 		port := u.Port
 		if port == 0 {
-			port = 53
+			port = defaultPortForTransport(u.Transport)
 		}
 		if i > 0 {
 			forwardAddrs += ";"
 		}
 		forwardAddrs += fmt.Sprintf("%s:%d", u.Address, port)
+
+		coreDNSUpstream := fmt.Sprintf("%s:%d", u.Address, port)
+		switch u.Transport {
+		case UpstreamTransportDoT:
+			coreDNSUpstream = fmt.Sprintf("tls://%s:%d", u.Address, port)
+			if u.TLSServerName != "" {
+				coreDNSTLSServerNames[u.TLSServerName] = struct{}{}
+			}
+		case UpstreamTransportDoH:
+			coreDNSUpstream = fmt.Sprintf("https://%s:%d", u.Address, port)
+			if u.TLSServerName != "" {
+				coreDNSTLSServerNames[u.TLSServerName] = struct{}{}
+			}
+		default:
+			unboundForwardTLSUpstream = false
+		}
+		if u.Transport != UpstreamTransportDoT {
+			unboundForwardTLSUpstream = false
+		}
+		coreDNSUpstreams = append(coreDNSUpstreams, coreDNSUpstream)
+	}
+
+	coreDNSTLSServerName := ""
+	if len(coreDNSTLSServerNames) == 1 {
+		for name := range coreDNSTLSServerNames {
+			coreDNSTLSServerName = name
+		}
 	}
 
 	return TemplateData{
-		EngineConfig:     normalized,
-		MsgCacheSize:     formatBytes(msgCacheBytes),
-		RrsetCacheSize:   formatBytes(rrsetCacheBytes),
-		ForwardAddresses: forwardAddrs,
+		EngineConfig:              normalized,
+		MsgCacheSize:              formatBytes(msgCacheBytes),
+		RrsetCacheSize:            formatBytes(rrsetCacheBytes),
+		ForwardAddresses:          forwardAddrs,
+		CoreDNSUpstreams:          coreDNSUpstreams,
+		CoreDNSTLSServerName:      coreDNSTLSServerName,
+		UnboundForwardTLSUpstream: unboundForwardTLSUpstream,
 	}
 }
 
 func normalizeTemplateConfig(config EngineConfig) EngineConfig {
 	normalized := config
 	normalized.ListenAddr = sanitizeTemplateValue(normalized.ListenAddr)
+	normalized.WorkerThreads = normalizeWorkerThreads(normalized.WorkerThreads)
+	normalized.DNSSEC.Mode = normalizeDNSSECMode(normalized.DNSSEC.Mode)
 	normalized.Upstreams = make([]UpstreamConfig, len(config.Upstreams))
 	for i := range config.Upstreams {
 		normalized.Upstreams[i] = config.Upstreams[i]
 		normalized.Upstreams[i].Address = sanitizeTemplateValue(config.Upstreams[i].Address)
+		normalized.Upstreams[i].Transport = normalizeUpstreamTransport(config.Upstreams[i].Transport)
+		if normalized.Upstreams[i].Port == 0 {
+			normalized.Upstreams[i].Port = defaultPortForTransport(normalized.Upstreams[i].Transport)
+		}
+		normalized.Upstreams[i].TLSServerName = sanitizeTemplateValue(config.Upstreams[i].TLSServerName)
+		if normalized.Upstreams[i].Transport != UpstreamTransportDNS && normalized.Upstreams[i].TLSServerName == "" {
+			normalized.Upstreams[i].TLSServerName = defaultTLSServerName(normalized.Upstreams[i].Address)
+		}
+		if normalized.Upstreams[i].Transport == UpstreamTransportDNS {
+			normalized.Upstreams[i].TLSServerName = ""
+		}
+		if normalized.Upstreams[i].Weight <= 0 {
+			normalized.Upstreams[i].Weight = defaultUpstreamWeight
+		}
+		if normalized.Upstreams[i].Preference <= 0 {
+			normalized.Upstreams[i].Preference = defaultUpstreamPreference
+		}
 	}
 
 	return normalized
@@ -152,15 +224,128 @@ func ValidateTemplateConfig(config EngineConfig) error {
 	if err := validateTemplateAddress(config.ListenAddr, "listenAddr"); err != nil {
 		return err
 	}
+	if _, ok := parseDNSSECMode(config.DNSSEC.Mode); !ok {
+		return fmt.Errorf("dnssec.mode must be one of off, process, or validate")
+	}
 
 	for i, upstream := range config.Upstreams {
 		field := fmt.Sprintf("upstreams[%d].address", i)
 		if err := validateTemplateAddress(upstream.Address, field); err != nil {
 			return err
 		}
+		transport, ok := parseUpstreamTransport(upstream.Transport)
+		if !ok {
+			return fmt.Errorf("upstreams[%d].transport must be one of dns, dot, or doh", i)
+		}
+
+		tlsServerName := strings.TrimSpace(upstream.TLSServerName)
+		if transport == UpstreamTransportDNS && tlsServerName != "" {
+			return fmt.Errorf("upstreams[%d].tlsServerName is only valid for dot or doh transport", i)
+		}
+		if tlsServerName != "" && !isValidHostname(tlsServerName) {
+			return fmt.Errorf("upstreams[%d].tlsServerName must be a valid DNS hostname", i)
+		}
+
+		if upstream.Weight < 0 {
+			return fmt.Errorf("upstreams[%d].weight must be greater than or equal to zero", i)
+		}
+		if upstream.Preference < 0 {
+			return fmt.Errorf("upstreams[%d].preference must be greater than or equal to zero", i)
+		}
 	}
 
 	return nil
+}
+
+func normalizeWorkerThreads(value int32) int32 {
+	if value > maxWorkerThreads {
+		return maxWorkerThreads
+	}
+	if value > 0 {
+		return value
+	}
+
+	threads := int32(runtime.NumCPU())
+	if threads <= 0 {
+		return defaultWorkerThreads
+	}
+	if threads > maxWorkerThreads {
+		return maxWorkerThreads
+	}
+
+	return threads
+}
+
+func defaultPortForTransport(transport UpstreamTransport) int32 {
+	switch transport {
+	case UpstreamTransportDoT:
+		return 853
+	case UpstreamTransportDoH:
+		return 443
+	default:
+		return 53
+	}
+}
+
+func defaultTLSServerName(address string) string {
+	trimmed := strings.TrimSuffix(strings.TrimSpace(address), ".")
+	if trimmed == "" {
+		return ""
+	}
+	if _, err := netip.ParseAddr(trimmed); err == nil {
+		return ""
+	}
+	if !isValidHostname(trimmed) {
+		return ""
+	}
+
+	return trimmed
+}
+
+func normalizeDNSSECMode(mode DNSSECMode) DNSSECMode {
+	parsed, ok := parseDNSSECMode(mode)
+	if !ok {
+		return DNSSECModeOff
+	}
+
+	return parsed
+}
+
+func parseDNSSECMode(mode DNSSECMode) (DNSSECMode, bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(string(mode)))
+	switch DNSSECMode(trimmed) {
+	case "", DNSSECModeOff:
+		return DNSSECModeOff, true
+	case DNSSECModeProcess:
+		return DNSSECModeProcess, true
+	case DNSSECModeValidate:
+		return DNSSECModeValidate, true
+	default:
+		return "", false
+	}
+}
+
+func normalizeUpstreamTransport(transport UpstreamTransport) UpstreamTransport {
+	parsed, ok := parseUpstreamTransport(transport)
+	if !ok {
+		return UpstreamTransportDNS
+	}
+
+	return parsed
+}
+
+func parseUpstreamTransport(transport UpstreamTransport) (UpstreamTransport, bool) {
+	trimmed := strings.ToLower(strings.TrimSpace(string(transport)))
+	switch UpstreamTransport(trimmed) {
+	case "", UpstreamTransportDNS:
+		return UpstreamTransportDNS, true
+	case UpstreamTransportDoT:
+		return UpstreamTransportDoT, true
+	case UpstreamTransportDoH:
+		return UpstreamTransportDoH, true
+	default:
+		return "", false
+	}
 }
 
 func validateTemplateAddress(value, field string) error {

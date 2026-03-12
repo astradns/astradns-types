@@ -16,8 +16,12 @@ func (e *testEngine) Configure(context.Context, EngineConfig) (string, error) { 
 func (e *testEngine) Start(context.Context) error                             { return nil }
 func (e *testEngine) Reload(context.Context) error                            { return nil }
 func (e *testEngine) Stop(context.Context) error                              { return nil }
-func (e *testEngine) HealthCheck(context.Context) (bool, error)               { return true, nil }
-func (e *testEngine) Name() EngineType                                        { return EngineType("test") }
+func (e *testEngine) Capabilities() EngineCapabilities                        { return EngineCapabilities{} }
+func (e *testEngine) HealthStatus(context.Context) (EngineHealthStatus, error) {
+	return EngineHealthStatus{Healthy: true}, nil
+}
+func (e *testEngine) HealthCheck(context.Context) (bool, error) { return true, nil }
+func (e *testEngine) Name() EngineType                          { return EngineType("test") }
 
 func resetRegistryForTest(t *testing.T) {
 	t.Helper()

@@ -11,6 +11,10 @@ type DNSUpstreamPoolSpec struct {
 	HealthCheck HealthCheckConfig `json:"healthCheck,omitempty"`
 	// LoadBalancing configures how queries are distributed across upstreams.
 	LoadBalancing LoadBalancingConfig `json:"loadBalancing,omitempty"`
+	// Runtime configures engine runtime tuning.
+	Runtime RuntimeConfig `json:"runtime,omitempty"`
+	// DNSSEC configures resolver DNSSEC processing mode.
+	DNSSEC DNSSECConfig `json:"dnssec,omitempty"`
 }
 
 // Upstream defines a single upstream DNS resolver.
@@ -20,11 +24,29 @@ type Upstream struct {
 	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:Pattern="^[A-Za-z0-9]([A-Za-z0-9.:-]*[A-Za-z0-9])?$"
 	Address string `json:"address"`
-	// Port is the port number of the upstream resolver. Defaults to 53.
-	// +kubebuilder:default=53
+	// Port is the port number of the upstream resolver.
+	// When omitted, defaults are transport-specific (53 for dns, 853 for dot, 443 for doh).
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=65535
 	Port int32 `json:"port,omitempty"`
+	// Transport selects upstream protocol transport: dns, dot, or doh.
+	// +kubebuilder:validation:Enum=dns;dot;doh
+	// +kubebuilder:default=dns
+	Transport string `json:"transport,omitempty"`
+	// TLSServerName overrides SNI/hostname verification for TLS-based transports.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern="^$|^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$"
+	TLSServerName string `json:"tlsServerName,omitempty"`
+	// Weight is the relative upstream weight.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	Weight int32 `json:"weight,omitempty"`
+	// Preference is the upstream priority hint. Lower values are preferred.
+	// +kubebuilder:default=100
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	Preference int32 `json:"preference,omitempty"`
 }
 
 // HealthCheckConfig configures upstream health checking.
@@ -52,6 +74,23 @@ type LoadBalancingConfig struct {
 	// +kubebuilder:validation:Enum=round-robin;first-available;random
 	// +kubebuilder:default=round-robin
 	Strategy string `json:"strategy,omitempty"`
+}
+
+// RuntimeConfig configures engine runtime tuning.
+type RuntimeConfig struct {
+	// WorkerThreads is the number of worker threads to configure on supported engines.
+	// When omitted, the runtime selects a CPU-based default.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=256
+	WorkerThreads int32 `json:"workerThreads,omitempty"`
+}
+
+// DNSSECConfig configures resolver DNSSEC processing.
+type DNSSECConfig struct {
+	// Mode controls DNSSEC behavior for supported engines.
+	// +kubebuilder:validation:Enum=off;process;validate
+	// +kubebuilder:default=off
+	Mode string `json:"mode,omitempty"`
 }
 
 // DNSUpstreamPoolStatus defines the observed state of DNSUpstreamPool.

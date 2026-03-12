@@ -15,7 +15,16 @@ func TestDNSUpstreamPoolJSONRoundTrip(t *testing.T) {
 			Namespace: "dns-system",
 		},
 		Spec: DNSUpstreamPoolSpec{
-			Upstreams: []Upstream{{Address: "1.1.1.1", Port: 53}},
+			Upstreams: []Upstream{{
+				Address:       "1.1.1.1",
+				Port:          853,
+				Transport:     "dot",
+				TLSServerName: "dns.quad9.net",
+				Weight:        5,
+				Preference:    10,
+			}},
+			Runtime: RuntimeConfig{WorkerThreads: 4},
+			DNSSEC:  DNSSECConfig{Mode: "validate"},
 		},
 	}
 
@@ -31,6 +40,15 @@ func TestDNSUpstreamPoolJSONRoundTrip(t *testing.T) {
 
 	if decoded.Spec.Upstreams[0].Address != original.Spec.Upstreams[0].Address {
 		t.Fatalf("expected upstream address %q, got %q", original.Spec.Upstreams[0].Address, decoded.Spec.Upstreams[0].Address)
+	}
+	if decoded.Spec.Upstreams[0].Transport != "dot" {
+		t.Fatalf("expected upstream transport dot, got %q", decoded.Spec.Upstreams[0].Transport)
+	}
+	if decoded.Spec.Runtime.WorkerThreads != 4 {
+		t.Fatalf("expected runtime workerThreads 4, got %d", decoded.Spec.Runtime.WorkerThreads)
+	}
+	if decoded.Spec.DNSSEC.Mode != "validate" {
+		t.Fatalf("expected dnssec mode validate, got %q", decoded.Spec.DNSSEC.Mode)
 	}
 }
 
@@ -83,6 +101,16 @@ func TestExternalDNSPolicyJSONRoundTrip(t *testing.T) {
 				Name: "default",
 			},
 			CacheProfileRef: ResourceRef{Name: "fast"},
+			SplitHorizon: &SplitHorizonPolicy{
+				Views: []SplitHorizonView{{
+					Name:        "corp-view",
+					SourceCIDRs: []string{"10.0.0.0/8"},
+					Zones: []SplitHorizonZoneRule{{
+						Zone:            "corp.example.com",
+						UpstreamPoolRef: ResourceRef{Name: "corp-upstream"},
+					}},
+				}},
+			},
 		},
 	}
 
@@ -101,5 +129,8 @@ func TestExternalDNSPolicyJSONRoundTrip(t *testing.T) {
 	}
 	if len(decoded.Spec.Selector.Namespaces) != 1 || decoded.Spec.Selector.Namespaces[0] != "tenant-a" {
 		t.Fatalf("expected namespace selector to include tenant-a, got %#v", decoded.Spec.Selector.Namespaces)
+	}
+	if decoded.Spec.SplitHorizon == nil || len(decoded.Spec.SplitHorizon.Views) != 1 {
+		t.Fatalf("expected split-horizon view to round-trip, got %#v", decoded.Spec.SplitHorizon)
 	}
 }

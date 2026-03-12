@@ -1,6 +1,9 @@
 package engine
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // EngineType identifies which DNS engine to use.
 type EngineType string
@@ -12,6 +15,30 @@ const (
 	EngineCoreDNS EngineType = "coredns"
 	// EnginePowerDNS is the PowerDNS Recursor.
 	EnginePowerDNS EngineType = "powerdns"
+)
+
+// UpstreamTransport identifies how upstream DNS queries are transported.
+type UpstreamTransport string
+
+const (
+	// UpstreamTransportDNS uses plain DNS over UDP/TCP.
+	UpstreamTransportDNS UpstreamTransport = "dns"
+	// UpstreamTransportDoT uses DNS-over-TLS.
+	UpstreamTransportDoT UpstreamTransport = "dot"
+	// UpstreamTransportDoH uses DNS-over-HTTPS.
+	UpstreamTransportDoH UpstreamTransport = "doh"
+)
+
+// DNSSECMode identifies DNSSEC processing behavior.
+type DNSSECMode string
+
+const (
+	// DNSSECModeOff disables DNSSEC processing.
+	DNSSECModeOff DNSSECMode = "off"
+	// DNSSECModeProcess enables DNSSEC-aware processing without strict validation.
+	DNSSECModeProcess DNSSECMode = "process"
+	// DNSSECModeValidate enables strict DNSSEC validation.
+	DNSSECModeValidate DNSSECMode = "validate"
 )
 
 // Engine manages the lifecycle of a DNS resolver engine.
@@ -29,11 +56,35 @@ type Engine interface {
 	// Stop gracefully shuts down the engine.
 	Stop(ctx context.Context) error
 
+	// Capabilities describes the feature surface supported by the engine implementation.
+	Capabilities() EngineCapabilities
+
+	// HealthStatus returns a detailed health snapshot for the running engine.
+	HealthStatus(ctx context.Context) (EngineHealthStatus, error)
+
 	// HealthCheck returns true if the engine is responding to DNS queries.
+	// Prefer HealthStatus when callers need latency and failure reason details.
 	HealthCheck(ctx context.Context) (bool, error)
 
 	// Name returns the engine identifier.
 	Name() EngineType
+}
+
+// EngineCapabilities describes supported behavior for an engine implementation.
+type EngineCapabilities struct {
+	SupportsHotReload         bool
+	SupportedTransports       []UpstreamTransport
+	SupportedDNSSECModes      []DNSSECMode
+	SupportsTLSServerName     bool
+	SupportsWeightedUpstreams bool
+	SupportsPriorityUpstreams bool
+}
+
+// EngineHealthStatus reports liveness plus diagnostic context.
+type EngineHealthStatus struct {
+	Healthy bool
+	Latency time.Duration
+	Reason  string
 }
 
 // EngineConfig is the engine-agnostic configuration derived from CRDs.
@@ -49,6 +100,12 @@ type EngineConfig struct {
 
 	// ListenPort is the port the engine should listen on (e.g., 5354).
 	ListenPort int32 `json:"listenPort"`
+
+	// WorkerThreads is the number of engine worker threads.
+	WorkerThreads int32 `json:"workerThreads,omitempty"`
+
+	// DNSSEC holds DNSSEC processing settings.
+	DNSSEC DNSSECConfig `json:"dnssec,omitempty"`
 }
 
 // UpstreamConfig represents a single upstream resolver.
@@ -57,6 +114,20 @@ type UpstreamConfig struct {
 	Address string `json:"address"`
 	// Port is the port of the upstream.
 	Port int32 `json:"port"`
+	// Transport selects upstream protocol transport.
+	Transport UpstreamTransport `json:"transport,omitempty"`
+	// TLSServerName overrides SNI/hostname verification for TLS-based transports.
+	TLSServerName string `json:"tlsServerName,omitempty"`
+	// Weight is the relative upstream weight.
+	Weight int32 `json:"weight,omitempty"`
+	// Preference is the priority hint for ordering upstreams.
+	Preference int32 `json:"preference,omitempty"`
+}
+
+// DNSSECConfig holds DNSSEC processing settings.
+type DNSSECConfig struct {
+	// Mode controls resolver DNSSEC behavior.
+	Mode DNSSECMode `json:"mode,omitempty"`
 }
 
 // CacheConfig holds cache tuning parameters.
