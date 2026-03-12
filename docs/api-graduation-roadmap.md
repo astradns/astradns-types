@@ -6,6 +6,7 @@ This document defines the upgrade path for `dns.astradns.com` APIs.
 
 - Active version: `v1alpha1`
 - Scope: MVP APIs for upstream pools, cache profiles, and external policy references
+- Conversion webhook status: not required yet (no `v1beta1` served)
 
 ## Graduation plan
 
@@ -21,6 +22,10 @@ This document defines the upgrade path for `dns.astradns.com` APIs.
 - Add hub/spoke conversion implementation
 - Register conversion webhook in operator deployment profile
 - Publish migration notes from `v1alpha1` to `v1beta1`
+
+#### Phase 2 entry criteria
+
+Start this phase only when at least one `v1beta1` type is added. Until then, keep webhook resources disabled to avoid unnecessary operational surface.
 
 ### Phase 3 - Stabilize `v1`
 
