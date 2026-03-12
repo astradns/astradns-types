@@ -24,6 +24,8 @@ const (
 const UnboundConfigTemplate = `server:
     interface: {{.ListenAddr}}
     port: {{.ListenPort}}
+    username: ""
+    chroot: ""
     do-daemonize: no
     use-syslog: no
     log-queries: no
