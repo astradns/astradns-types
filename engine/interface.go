@@ -87,6 +87,30 @@ type EngineHealthStatus struct {
 	Reason  string
 }
 
+// DomainFilterAction determines how denied queries are answered.
+type DomainFilterAction string
+
+const (
+	// DomainFilterActionRefused responds with REFUSED to denied queries.
+	DomainFilterActionRefused DomainFilterAction = "refused"
+	// DomainFilterActionNXDomain responds with NXDOMAIN to denied queries.
+	DomainFilterActionNXDomain DomainFilterAction = "nxdomain"
+)
+
+// DomainFilterConfig controls proxy-level domain allow/deny filtering.
+type DomainFilterConfig struct {
+	// Allow is a list of domain patterns that are permitted. If non-empty,
+	// only domains matching at least one pattern are allowed. Patterns support
+	// wildcards: "*.example.com" matches any subdomain of example.com.
+	Allow []string `json:"allow,omitempty"`
+	// Deny is a list of domain patterns that are blocked. Deny rules are
+	// evaluated after allow rules. A domain matching both allow and deny is denied.
+	Deny []string `json:"deny,omitempty"`
+	// Action determines the DNS response code for denied queries.
+	// Defaults to "refused".
+	Action DomainFilterAction `json:"action,omitempty"`
+}
+
 // EngineConfig is the engine-agnostic configuration derived from CRDs.
 type EngineConfig struct {
 	// Upstreams is the list of upstream resolvers to forward to.
@@ -94,6 +118,9 @@ type EngineConfig struct {
 
 	// Cache holds cache tuning parameters.
 	Cache CacheConfig `json:"cache"`
+
+	// DomainFilter holds optional proxy-level domain allow/deny rules.
+	DomainFilter DomainFilterConfig `json:"domainFilter,omitempty"`
 
 	// ListenAddr is the address the engine should listen on (e.g., "127.0.0.1").
 	ListenAddr string `json:"listenAddr"`

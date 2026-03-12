@@ -15,6 +15,26 @@ type DNSUpstreamPoolSpec struct {
 	Runtime RuntimeConfig `json:"runtime,omitempty"`
 	// DNSSEC configures resolver DNSSEC processing mode.
 	DNSSEC DNSSECConfig `json:"dnssec,omitempty"`
+	// DomainFilter configures proxy-level domain allow/deny filtering.
+	DomainFilter DomainFilterConfig `json:"domainFilter,omitempty"`
+}
+
+// DomainFilterConfig controls proxy-level domain allow/deny filtering.
+type DomainFilterConfig struct {
+	// Allow is a list of domain patterns that are permitted.
+	// If non-empty, only domains matching at least one pattern are allowed.
+	// Patterns support wildcards: "*.example.com" matches any subdomain.
+	// +optional
+	Allow []string `json:"allow,omitempty"`
+	// Deny is a list of domain patterns that are blocked.
+	// Deny rules are evaluated after allow rules; a domain matching both is denied.
+	// +optional
+	Deny []string `json:"deny,omitempty"`
+	// Action determines the DNS response code for denied queries: refused or nxdomain.
+	// +kubebuilder:validation:Enum=refused;nxdomain
+	// +kubebuilder:default=refused
+	// +optional
+	Action string `json:"action,omitempty"`
 }
 
 // Upstream defines a single upstream DNS resolver.
